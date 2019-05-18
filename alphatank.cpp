@@ -15,6 +15,7 @@ using std::cout;
 using std::endl;
 using std::flush;
 using std::getline;
+using std::queue;
 
 clock_t startTime;
 int cnt = 0;
@@ -48,7 +49,8 @@ namespace TankGame {
         Blue0 = 8,
         Blue1 = 16,
         Red0 = 32,
-        Red1 = 64
+        Red1 = 64,
+        Water = 128
     };
 
     template<class T>
@@ -87,16 +89,16 @@ namespace TankGame {
     };
 
     char *ActionToString(Action act) {
-        if (act == Invalid)return "Invalid";
-        if (act == Stay)return "Stay";
-        if (act == Up)return "Up";
-        if (act == Right)return "Right";
-        if (act == Down)return "Down";
-        if (act == Left)return "Left";
-        if (act == UpShoot)return "UpShoot";
-        if (act == RightShoot)return "RightShoot";
-        if (act == DownShoot)return "DownShoot";
-        if (act == LeftShoot)return "LeftShoot";
+        if (act == Invalid) return "Invalid";
+        if (act == Stay) return "Stay";
+        if (act == Up) return "Up";
+        if (act == Right) return "Right";
+        if (act == Down) return "Down";
+        if (act == Left) return "Left";
+        if (act == UpShoot) return "UpShoot";
+        if (act == RightShoot) return "RightShoot";
+        if (act == DownShoot) return "DownShoot";
+        if (act == LeftShoot) return "LeftShoot";
     }
 
     // 坐标左上角为原点（0, 0），x 轴向右延伸，y 轴向下延伸
@@ -118,9 +120,10 @@ namespace TankGame {
             {Red0,  Red1}
     };
 
+    int maxTurn = 100;
+
     inline Action Forward(int side) {
-        if (side == Blue)return Down;
-        return Up;
+        return side==Blue?Down:Up;
     }
 
     inline bool ActionIsMove(Action x) {
@@ -137,6 +140,11 @@ namespace TankGame {
 
     inline bool CoordValid(int x, int y) {
         return x >= 0 && x < fieldWidth && y >= 0 && y < fieldHeight;
+    }
+
+    inline bool canStand(FieldItem item) {
+        const int mask = Brick | Steel | Base | Water;
+        return !(item & mask);
     }
 
     // 判断 item 是不是叠在一起的多个坦克
@@ -200,7 +208,7 @@ namespace TankGame {
                     for (int o = 0; o < 4; ++o) {
                         int nx = p.first + dx[o];
                         int ny = p.second + dy[o];
-                        if (CoordValid(nx, ny) && (gameField[ny][nx] & 3) == 0 && dis[ny][nx] == (int) 1e9) {
+                        if (CoordValid(nx, ny) && (gameField[ny][nx] & (Steel | Water)) == 0 && dis[ny][nx] == (int) 1e9) {
                             dis[ny][nx] = d + 1;
                             if (gameField[ny][nx] != Base)q[tail++] = make_pair(nx, ny);
                         }
@@ -213,7 +221,7 @@ namespace TankGame {
                     for (int o = 0; o < 4; ++o) {
                         int nx = ttx + dx[o];
                         int ny = tty + dy[o];
-                        if (CoordValid(nx, ny) && (gameField[ny][nx] & 6) == 0 && (gameField[ny][nx] & 1) != 0 &&
+                        if (CoordValid(nx, ny) && (gameField[ny][nx] & (Steel|Base|Water)) == 0 && (gameField[ny][nx] & Brick) != 0 &&
                             dis[ny][nx] == (int) 1e9) {
                             dis[ny][nx] = d + 2;
                             q[tail++] = make_pair(nx, ny);
@@ -236,7 +244,7 @@ namespace TankGame {
                     int nx = x - dx[o];
                     int ny = y - dy[o];
                     if (CoordValid(nx, ny) && !goodPath[ny][nx] &&
-                        dis[y][x] - dis[ny][nx] == ((gameField[y][x] & 1) ? 2 : 1)) {
+                        dis[y][x] - dis[ny][nx] == ((gameField[y][x] & Brick) ? 2 : 1)) {
                         goodPath[ny][nx] = true;
                         goodDir[ny][nx][o] = true;
                         q[tail++] = make_pair(nx, ny);
@@ -247,6 +255,7 @@ namespace TankGame {
 
         bool vis[fieldHeight][fieldWidth];
 
+        // water don't block the way
         void dfs(int x1, int y1, FieldItem (*gameField)[fieldWidth]) {
             vis[y1][x1] = true;
             for (int i = 0; i < 4; ++i) {
@@ -297,7 +306,7 @@ namespace TankGame {
         int mySide;
 
         // 用于回退的log
-        stack<DisappearLog> logs;
+        stack <DisappearLog> logs;
 
         // 过往动作（previousActions[x] 表示所有人在第 x 回合的动作，第 0 回合的动作没有意义）
         Action previousActions[106][sideCount][tankPerSide] = {{{Stay, Stay}, {Stay, Stay}}};
@@ -412,7 +421,7 @@ namespace TankGame {
                             if (!CoordValid(x, y))
                                 break;
                             FieldItem items = gameField[y][x];
-                            if (items != None) {
+                            if (items != None && items != Water) {
                                 // 对射判断
                                 if (items >= Blue0 &&
                                     !hasMultipleTankWithMe && !HasMultipleTank(items)) {
@@ -532,7 +541,7 @@ namespace TankGame {
                 if ((!tankAlive[side][0] && !tankAlive[side][1]) || !baseAlive[side])
                     fail[side] = true;
             if (fail[0] == fail[1])
-                return fail[0] || currentTurn > 105 ? Draw : NotFinished;
+                return fail[0] || currentTurn > 105 ? Draw : NotFinished; // TODO: why 105 ???
             if (fail[Blue])
                 return Red;
             return Blue;
@@ -547,13 +556,19 @@ namespace TankGame {
         }
 
         // 三个 int 表示场地 01 矩阵（每个 int 用 27 位表示 3 行）
-        TankField(int hasBrick[3], int mySide) : mySide(mySide) {
+        // why only hasBrick
+        TankField(int hasBrick[3], int hasWater[3], int hasSteel[3], int mySide) : mySide(mySide) {
+//        TankField(int hasBrick[3], int mySide) : mySide(mySide) {
             for (int i = 0; i < 3; i++) {
                 int mask = 1;
                 for (int y = i * 3; y < (i + 1) * 3; y++) {
                     for (int x = 0; x < fieldWidth; x++) {
                         if (hasBrick[i] & mask)
                             gameField[y][x] = Brick;
+                        else if (hasWater[i] & mask)
+                            gameField[y][x] = Water;
+                        else if (hasSteel[i] & mask)
+                            gameField[y][x] = Steel;
                         mask <<= 1;
                     }
                 }
@@ -563,7 +578,6 @@ namespace TankGame {
                     gameField[tankY[side][tank]][tankX[side][tank]] = tankItemTypes[side][tank];
                 gameField[baseY[side]][baseX[side]] = Base;
             }
-            gameField[baseY[0] + 1][baseX[0]] = gameField[baseY[1] - 1][baseX[1]] = Steel;
         }
 
         // 打印场地
@@ -576,7 +590,7 @@ namespace TankGame {
             cout << boldHR << endl
                  << "图例：" << endl
                  << ". - 空\t# - 砖\t% - 钢\t* - 基地\t@ - 多个坦克" << endl
-                 << "b - 蓝0\tB - 蓝1\tr - 红0\tR - 红1" << endl
+                 << "b - 蓝0\tB - 蓝1\tr - 红0\tR - 红1\tW - 水" << endl //Tank2 feature
                  << slimHR << endl;
             for (int y = 0; y < fieldHeight; y++) {
                 for (int x = 0; x < fieldWidth; x++) {
@@ -605,6 +619,9 @@ namespace TankGame {
                         case Red1:
                             cout << 'R';
                             break;
+                        case Water:
+                            cout << 'W';
+                            break;
                         default:
                             cout << '@';
                             break;
@@ -629,6 +646,33 @@ namespace TankGame {
                 cout << side2String[result] << "方胜利" << endl;
             cout << boldHR << endl;
 #endif
+        }
+
+        bool operator!=(const TankField &b) const {
+
+            for (int y = 0; y < fieldHeight; y++)
+                for (int x = 0; x < fieldWidth; x++)
+                    if (gameField[y][x] != b.gameField[y][x])
+                        return true;
+
+            for (int side = 0; side < sideCount; side++)
+                for (int tank = 0; tank < tankPerSide; tank++) {
+                    if (tankX[side][tank] != b.tankX[side][tank])
+                        return true;
+                    if (tankY[side][tank] != b.tankY[side][tank])
+                        return true;
+                    if (tankAlive[side][tank] != b.tankAlive[side][tank])
+                        return true;
+                }
+
+            if (baseAlive[0] != b.baseAlive[0] ||
+                baseAlive[1] != b.baseAlive[1])
+                return true;
+
+            if (currentTurn != b.currentTurn)
+                return true;
+
+            return false;
         }
 
         bool JustShoot(int side, int tank) {
@@ -722,6 +766,7 @@ namespace TankGame {
         bool goodDir[sideCount][tankPerSide][fieldHeight][fieldWidth][4]{false};
         bool hasInit[sideCount][tankPerSide];
 
+//  TODO: need revisement due to water
         void InitDistance(int side, int tank) {
             if (hasInit[side][tank])return;
             hasInit[side][tank] = true;
@@ -744,12 +789,12 @@ namespace TankGame {
             if ((side ^ tank) == 0) {
                 for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
                     if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
-                    if (gameField[baseY[!side]][tx] & 1)det += 2;
+                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
                 }
             } else {
                 for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
                     if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
-                    if (gameField[baseY[!side]][tx] & 1)det += 2;
+                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
                 }
             }
             attackDis[side][tank] = ret + 1 + (tankY[side][tank] == baseY[!side] && JustShoot(side, tank));
@@ -757,12 +802,12 @@ namespace TankGame {
             if ((side ^ tank) == 0) {
                 for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
                     if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
-                    if (gameField[baseY[!side]][tx] & 1)det += 2;
+                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
                 }
             } else {
                 for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
                     if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
-                    if (gameField[baseY[!side]][tx] & 1)det += 2;
+                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
                 }
             }
             Utility::BFSBestPath(baseY[!side], gameField, dis[side][tank], goodPath[side][tank], goodDir[side][tank]);
@@ -773,12 +818,12 @@ namespace TankGame {
             if (side ^ tank) {
                 for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
                     if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
-                    if (gameField[baseY[!side]][tx] & 1)det += 2;
+                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
                 }
             } else {
                 for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
                     if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
-                    if (gameField[baseY[!side]][tx] & 1)det += 2;
+                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
                 }
             }
             attackDis[side][tank] = min(attackDis[side][tank], ret + 1);
@@ -796,7 +841,7 @@ namespace TankGame {
                         dis[side][tank][baseY[side]][x] >= dis[!side][!tank][baseY[side]][x])
                         return false;
                     mn = min(mn, dis[side][tank][baseY[side]][x]);
-                    if (gameField[baseY[!side]][x] & 1)det += 2;
+                    if (gameField[baseY[!side]][x] & Brick)det += 2;
                 }
             } else {
                 for (int x = baseX[side] + 1, det = 0, mn = (int) 1e9; x <= fieldWidth; ++x) {
@@ -804,7 +849,7 @@ namespace TankGame {
                         dis[side][tank][baseY[side]][x] >= dis[!side][!tank][baseY[side]][x])
                         return false;
                     mn = min(mn, dis[side][tank][baseY[side]][x]);
-                    if (gameField[baseY[!side]][x] & 1)det += 2;
+                    if (gameField[baseY[!side]][x] & Brick)det += 2;
                 }
             }
             if (tankY[side][tank] == baseY[side] && std::abs(tankX[side][tank] - baseX[side]) == 1) {
@@ -1040,15 +1085,18 @@ namespace TankGame {
                 }
             } else {
                 // 是第一回合，裁判在介绍场地
-                int hasBrick[3];
-                for (int i = 0; i < 3; i++)
-                    hasBrick[i] = value["field"][i].asInt();
-                field = new TankField(hasBrick, value["mySide"].asInt());
+                int hasBrick[3], hasWater[3], hasSteel[3];
+                for (int i = 0; i < 3; i++) {
+                    hasWater[i] = value["waterfield"][i].asInt();
+                    hasBrick[i] = value["brickfield"][i].asInt();
+                    hasSteel[i] = value["steelfield"][i].asInt();
+                }
+                field = new TankField(hasBrick, hasWater, hasSteel, value["mySide"].asInt());
             }
         }
 
         // 请使用 SubmitAndExit 或者 SubmitAndDontExit
-        void _submitAction(Action tank0, Action tank1, string debug = "", string data = "", string globalData = "") {
+        void _submitAction(Action tank0, Action tank1, string debug = "", string data = "", string globaldata = "") {
             Json::Value output(Json::objectValue), response(Json::arrayValue);
             response[0U] = tank0;
             response[1U] = tank1;
@@ -1057,8 +1105,8 @@ namespace TankGame {
                 output["debug"] = debug;
             if (!data.empty())
                 output["data"] = data;
-            if (!globalData.empty())
-                output["globalData"] = globalData;
+            if (!globaldata.empty())
+                output["globaldata"] = globaldata;
             cout << writer.write(output) << endl;
         }
     }
@@ -1088,7 +1136,7 @@ namespace TankGame {
         if (input.isObject()) {
             Json::Value requests = input["requests"], responses = input["responses"];
             if (!requests.isNull() && requests.isArray()) {
-                int i, n = requests.size();
+                size_t i, n = requests.size();
                 for (i = 0; i < n; i++) {
                     Internals::_processRequestOrResponse(requests[i], true);
                     if (i < n - 1)
@@ -1103,8 +1151,8 @@ namespace TankGame {
     }
 
     // 提交决策并退出，下回合时会重新运行程序
-    void SubmitAndExit(Action tank0, Action tank1, string debug = "", string data = "", string globalData = "") {
-        Internals::_submitAction(tank0, tank1, debug, data, globalData);
+    void SubmitAndExit(Action tank0, Action tank1, string debug = "", string data = "", string globaldata = "") {
+        Internals::_submitAction(tank0, tank1, debug, data, globaldata);
 #ifndef _BOTZONE_ONLINE
         std::cerr << cnt << endl;
 #endif
@@ -1382,6 +1430,7 @@ TankGame::Action RandAction(int tank) {
 
 int main() {
     srand((unsigned) time(nullptr));
+
     string data, globaldata;
     TankGame::ReadInput(cin, data, globaldata);
     startTime = clock();
