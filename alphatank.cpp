@@ -1136,7 +1136,7 @@ namespace TankGame {
         if (input.isObject()) {
             Json::Value requests = input["requests"], responses = input["responses"];
             if (!requests.isNull() && requests.isArray()) {
-                size_t i, n = requests.size();
+                int i, n = requests.size();
                 for (i = 0; i < n; i++) {
                     Internals::_processRequestOrResponse(requests[i], true);
                     if (i < n - 1)
