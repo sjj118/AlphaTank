@@ -797,6 +797,11 @@ namespace TankGame {
                     if (gameField[baseY[!side]][tx] & Brick)det += 2;
                 }
             }
+            int dty = dy[Forward(side)];
+            for (int ty = baseY[!side]-dty, det = 0; gameField[baseX[!side]][ty]&Steel == 0; ty -= dty) {
+                if (dis[side][tank][ty][baseX[!side]] + det < ret)ret = dis[side][tank][ty][baseX[!side]] + det;
+                if (gameField[ty][baseX[!side]] & Brick)det += 2;
+            }
             attackDis[side][tank] = ret + 1 + (tankY[side][tank] == baseY[!side] && JustShoot(side, tank));
             for (int i = 0; i < fieldHeight; ++i)for (int j = 0; j < fieldWidth; ++j)goodPath[side][tank][i][j] = false;
             if ((side ^ tank) == 0) {
@@ -809,6 +814,10 @@ namespace TankGame {
                     if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
                     if (gameField[baseY[!side]][tx] & Brick)det += 2;
                 }
+            }
+            for (int ty = baseY[!side]-dty, det = 0; gameField[baseX[!side]][ty]&Steel == 0; ty -= dty) {
+                if (dis[side][tank][ty][baseX[!side]] + det == ret)goodPath[side][tank][ty][baseX[!side]] = true;
+                if (gameField[ty][baseX[!side]] & Brick)det += 2;
             }
             Utility::BFSBestPath(baseY[!side], gameField, dis[side][tank], goodPath[side][tank], goodDir[side][tank]);
         }
