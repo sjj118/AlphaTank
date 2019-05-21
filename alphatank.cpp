@@ -123,7 +123,7 @@ namespace TankGame {
     int maxTurn = 100;
 
     inline Action Forward(int side) {
-        return side==Blue?Down:Up;
+        return side == Blue ? Down : Up;
     }
 
     inline bool ActionIsMove(Action x) {
@@ -208,7 +208,8 @@ namespace TankGame {
                     for (int o = 0; o < 4; ++o) {
                         int nx = p.first + dx[o];
                         int ny = p.second + dy[o];
-                        if (CoordValid(nx, ny) && (gameField[ny][nx] & (Steel | Water)) == 0 && dis[ny][nx] == (int) 1e9) {
+                        if (CoordValid(nx, ny) && (gameField[ny][nx] & (Brick | Steel | Water)) == 0 &&
+                            dis[ny][nx] == (int) 1e9) {
                             dis[ny][nx] = d + 1;
                             if (gameField[ny][nx] != Base)q[tail++] = make_pair(nx, ny);
                         }
@@ -221,7 +222,8 @@ namespace TankGame {
                     for (int o = 0; o < 4; ++o) {
                         int nx = ttx + dx[o];
                         int ny = tty + dy[o];
-                        if (CoordValid(nx, ny) && (gameField[ny][nx] & (Steel|Base|Water)) == 0 && (gameField[ny][nx] & Brick) != 0 &&
+                        if (CoordValid(nx, ny) && (gameField[ny][nx] & (Steel | Base | Water)) == 0 &&
+                            (gameField[ny][nx] & Brick) != 0 &&
                             dis[ny][nx] == (int) 1e9) {
                             dis[ny][nx] = d + 2;
                             q[tail++] = make_pair(nx, ny);
@@ -260,7 +262,7 @@ namespace TankGame {
             vis[y1][x1] = true;
             for (int i = 0; i < 4; ++i) {
                 int x = x1 + dx[i], y = y1 + dy[i];
-                if (CoordValid(x, y) && !vis[y][x] && (gameField[y][x] & 7) == 0) {
+                if (CoordValid(x, y) && !vis[y][x] && (gameField[y][x] & (Brick | Steel | Base | Water)) == 0) {
                     dfs(x, y, gameField);
                 }
             }
@@ -269,7 +271,7 @@ namespace TankGame {
         bool IsLink(int x1, int y1, int x2, int y2, FieldItem (*gameField)[fieldWidth]) {
             if (x1 == -1 || x2 == -1)return false;
             memset(vis, 0, sizeof(vis));
-            if (gameField[y1][x1] & 7)return 0;
+            if (gameField[y1][x1] & (Brick | Steel | Base | Water))return 0;
             dfs(x1, y1, gameField);
             return vis[y2][x2];
         }
@@ -306,7 +308,7 @@ namespace TankGame {
         int mySide;
 
         // 用于回退的log
-        stack <DisappearLog> logs;
+        stack<DisappearLog> logs;
 
         // 过往动作（previousActions[x] 表示所有人在第 x 回合的动作，第 0 回合的动作没有意义）
         Action previousActions[106][sideCount][tankPerSide] = {{{Stay, Stay}, {Stay, Stay}}};
@@ -418,8 +420,7 @@ namespace TankGame {
                         while (true) {
                             x += dx[dir];
                             y += dy[dir];
-                            if (!CoordValid(x, y))
-                                break;
+                            if (!CoordValid(x, y))break;
                             FieldItem items = gameField[y][x];
                             if (items != None && items != Water) {
                                 // 对射判断
@@ -747,6 +748,13 @@ namespace TankGame {
             return MayShooting(side1, tank1, act1, x, y);
         }
 
+        bool MayStack(int side1, int tank1, Action act1, int side2, int tank2, Action act2) {
+            if (!ActionIsMove(act1) || !ActionIsMove(act2))return false;
+            int x1 = tankX[side1][tank1] + dx[act1], y1 = tankY[side1][tank1] + dy[act1];
+            int x2 = tankX[side2][tank2] + dx[act2], y2 = tankY[side2][tank2] + dy[act2];
+            return x1 == x2 && y1 == y2;
+        }
+
         bool IsLink(int x1, int y1, int x2, int y2) {
             return Utility::IsLink(x1, y1, x2, y2, gameField);
         }
@@ -786,38 +794,38 @@ namespace TankGame {
                     gameField[i][tankX[!side][!tank]] = None;
             }
             int ret = (int) 1e9;
-            if ((side ^ tank) == 0) {
-                for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
-                    if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
-                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
-                }
-            } else {
-                for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
-                    if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
-                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
-                }
+            for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
+                if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
+                if (gameField[baseY[!side]][tx] & Brick)det += 2;
+                if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
+            }
+            for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
+                if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
+                if (gameField[baseY[!side]][tx] & Brick)det += 2;
+                if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
             }
             int dty = dy[Forward(side)];
-            for (int ty = baseY[!side]-dty, det = 0; gameField[baseX[!side]][ty]&Steel == 0; ty -= dty) {
+            for (int ty = baseY[!side] - dty, det = 0; (gameField[baseX[!side]][ty] & Steel) == 0; ty -= dty) {
                 if (dis[side][tank][ty][baseX[!side]] + det < ret)ret = dis[side][tank][ty][baseX[!side]] + det;
                 if (gameField[ty][baseX[!side]] & Brick)det += 2;
+                if (gameField[ty][baseX[!side]] & Steel)det = (int) 1e9;
             }
             attackDis[side][tank] = ret + 1 + (tankY[side][tank] == baseY[!side] && JustShoot(side, tank));
             for (int i = 0; i < fieldHeight; ++i)for (int j = 0; j < fieldWidth; ++j)goodPath[side][tank][i][j] = false;
-            if ((side ^ tank) == 0) {
-                for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
-                    if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
-                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
-                }
-            } else {
-                for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
-                    if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
-                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
-                }
+            for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
+                if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
+                if (gameField[baseY[!side]][tx] & Brick)det += 2;
+                if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
             }
-            for (int ty = baseY[!side]-dty, det = 0; gameField[baseX[!side]][ty]&Steel == 0; ty -= dty) {
+            for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
+                if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
+                if (gameField[baseY[!side]][tx] & Brick)det += 2;
+                if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
+            }
+            for (int ty = baseY[!side] - dty, det = 0; (gameField[baseX[!side]][ty] & Steel) == 0; ty -= dty) {
                 if (dis[side][tank][ty][baseX[!side]] + det == ret)goodPath[side][tank][ty][baseX[!side]] = true;
                 if (gameField[ty][baseX[!side]] & Brick)det += 2;
+                if (gameField[ty][baseX[!side]] & Steel)det = (int) 1e9;
             }
             Utility::BFSBestPath(baseY[!side], gameField, dis[side][tank], goodPath[side][tank], goodDir[side][tank]);
         }
@@ -828,11 +836,13 @@ namespace TankGame {
                 for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
                     if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
                     if (gameField[baseY[!side]][tx] & Brick)det += 2;
+                    if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
                 }
             } else {
                 for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
                     if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
                     if (gameField[baseY[!side]][tx] & Brick)det += 2;
+                    if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
                 }
             }
             attackDis[side][tank] = min(attackDis[side][tank], ret + 1);
@@ -978,30 +988,29 @@ namespace TankGame {
             InitDistance(side, tank);
             if (!tankAlive[!side][!tank])return (int) 1e8 - attackDis[side][tank];
             InitDistance(!side, !tank);
-            if (attackDis[!side][!tank] - attackDis[side][tank] >= 3)AnotherDistance(side, tank);
-            int ret = 10 * (attackDis[!side][!tank] - attackDis[side][tank]);
+            int ret = 100 * (attackDis[!side][!tank] - attackDis[side][tank]) + 6 * (10 - attackDis[side][tank]);
 //            ret += BlocksBetween(!side, !tank) - BlocksBetween(side, tank);
-            if (IsLink(tankX[side][tank], tankY[side][tank], tankX[!side][!tank], tankY[!side][!tank])) {
-                if (VerticalDis(side, tank) <= 0 ||
-                    dis[side][tank][baseY[side]][baseX[side]] >= dis[!side][!tank][baseY[side]][baseX[side]]) {
-                    if (CanTankShootEachOther(side, tank)) {
-                        int c1 = GetCorner(!side, !tank), c2 = GetCorner(side, tank);
-                        if (c1 == -1 && c2 == -1);
-                        else if (c1 == -1)ret -= 5 * (c2 + 1);
-                        else if (c2 == -1)ret += 5 * (c1 + 1);
-                        else ret += 5 * sgn(c1 - c2);
-                    }
-                    return 10000 * ret - 500;
-                }
-                if (WillCounter(side, tank)) {
-                    ret = 0;
-                }
-                return 100 * ret;
-            } else {
-                if (gameField[4][tankX[!side][!tank]] != Brick &&
-                    gameField[4 + dy[Forward(!side)]][tankX[!side][!tank]] == Brick)
-                    ret -= 50;
-            }
+//            if (IsLink(tankX[side][tank], tankY[side][tank], tankX[!side][!tank], tankY[!side][!tank])) {
+//                if (VerticalDis(side, tank) <= 0 ||
+//                    dis[side][tank][baseY[side]][baseX[side]] >= dis[!side][!tank][baseY[side]][baseX[side]]) {
+//                    if (CanTankShootEachOther(side, tank)) {
+//                        int c1 = GetCorner(!side, !tank), c2 = GetCorner(side, tank);
+//                        if (c1 == -1 && c2 == -1);
+//                        else if (c1 == -1)ret -= 5 * (c2 + 1);
+//                        else if (c2 == -1)ret += 5 * (c1 + 1);
+//                        else ret += 5 * sgn(c1 - c2);
+//                    }
+//                    return 10000 * ret - 500;
+//                }
+//                if (WillCounter(side, tank)) {
+//                    ret = 0;
+//                }
+//                return 100 * ret;
+//            } else {
+//                if (gameField[4][tankX[!side][!tank]] != Brick &&
+//                    gameField[4 + dy[Forward(!side)]][tankX[!side][!tank]] == Brick)
+//                    ret -= 50;
+//            }
             return ret;
         }
 
@@ -1192,8 +1201,8 @@ namespace TankGame {
         };
 
         inline int LessStepIsBetter(int val) {
-            if (std::abs(val) >= (int) 1e6)return val - 1;
-            return val;
+//            if (std::abs(val) >= (int) 1e6)return val - 1;
+            return val - 1;
         }
 
         int EstimateCross(Action act0, Action act1) {
@@ -1223,25 +1232,24 @@ namespace TankGame {
 
         int table[9][9];
 
-        pair<int, Action> MinMax(int depth = 0, int alpha = (int) 1e9) {
+        pair<pair<int, Action>, Action> MinMax(int depth = 0, int alpha = (int) 1e9) {
             ++cnt;
             GameResult result = field->GetGameResult(side, tank);
-            if (result == side)return make_pair((int) 1e9, Invalid);
-            if (result == !side)return make_pair((int) -1e9, Invalid);
-            if (result == Draw)return make_pair(0, Invalid);
-            if (!field->tankAlive[side][tank])return make_pair((int) -1e8, Stay);
-            if (field->CrossShoot(side, tank))return make_pair((int) -1e8, Stay);
-            if (depth >= maxDepth)return make_pair(field->EstimateAttack(side, tank), Invalid);
-            int beta = (int) -150000;
-            Action act = Invalid;
+            if (result == side)return make_pair(make_pair((int) 1e9, Invalid), Invalid);
+            if (result == !side)return make_pair(make_pair((int) -1e9, Invalid), Invalid);
+            if (result == Draw)return make_pair(make_pair(0, Invalid), Invalid);
+            if (!field->tankAlive[side][tank])return make_pair(make_pair((int) -1e8, Stay), Stay);
+            if (field->CrossShoot(side, tank))return make_pair(make_pair((int) -1e8, Stay), Stay);
+            if (depth >= maxDepth)return make_pair(make_pair(field->EstimateAttack(side, tank), Invalid), Invalid);
+            int beta = (int) -150000, secbeta = (int) -150000;
+            Action act = Invalid, secact = Invalid;
             Action pattern = field->GetPattern(!side, !tank, side, tank);
             if (depth <= 3) {// quick judge
                 for (auto act0:acts[side]) {
                     if (field->ActionIsValid(side, tank, act0)) {
                         field->nextAction[side][tank] = act0;
                         int x = field->getDirection(!side, !tank);
-                        field->nextAction[!side][!tank] =
-                                x >= 0 && field->ActionIsValid(!side, !tank, LeftShoot) ? (Action) (x + 4) : Stay;
+                        field->nextAction[!side][!tank] = Stay;
                         if (depth == 0 && pattern != Invalid)field->nextAction[!side][!tank] = pattern;
                         field->nextAction[side][!tank] = Stay;
                         field->nextAction[!side][tank] = Stay;
@@ -1255,8 +1263,13 @@ namespace TankGame {
                         tmp = LessStepIsBetter(tmp);
                         if (depth == 0)tmp += EstimateCross(act0, Stay);
                         if (tmp > beta) {
+                            secbeta = beta;
                             beta = tmp;
+                            secact = act;
                             act = act0;
+                        } else if (tmp > secbeta) {
+                            secbeta = tmp;
+                            secact = act0;
                         }
                     }
                 }
@@ -1293,7 +1306,7 @@ namespace TankGame {
                             field->nextAction[side][!tank] = Stay;
                             field->nextAction[!side][tank] = Stay;
                             field->DoAction();
-                            int tmp = MinMax(depth + 1, gamma).first;
+                            int tmp = MinMax(depth + 1, gamma).first.first;
                             field->Revert();
                             if (depth == 0)tmp += EstimateCross(act0, act1);
 //                            if (depth == 0)table[act0 + 1][act1 + 1] = tmp;
@@ -1301,22 +1314,17 @@ namespace TankGame {
                         }
                     }
                     if (gamma > beta) {
+                        secbeta = beta;
                         beta = gamma;
+                        secact = act;
                         act = act0;
+                    } else if (gamma > secbeta) {
+                        secbeta = gamma;
+                        secact = act0;
                     }
-                    if (depth == 0 && gamma == beta && field->inLine(side, tank) &&
-                        field->BlocksBetween(side, tank)) {
-                        if (((side ^ tank) && act0 == LeftShoot) || ((side ^ tank) == 0 && act0 == RightShoot)) {
-                            act = act0;
-                        }
-                    }
-//                    if (depth == 0 && gamma == beta && field->inLine(side, tank) &&
-//                        field->GetPattern(side, tank, !side, !tank) == act) {
-//                        act = act0;
-//                    }
                 }
             }
-            return make_pair(LessStepIsBetter(beta), act);
+            return make_pair(make_pair(LessStepIsBetter(beta), act), secact);
         }
 
         Action Defense() {
@@ -1396,16 +1404,18 @@ namespace TankGame {
 #endif
         }
 
-        Action GetAction() {
-            auto[value, act] = MinMax();
+        pair<Action, Action> GetAction() {
+            auto[pa, secact] = MinMax();
+            auto[value, act] = pa;
             debug += ' ' + std::to_string(value) + ' ';
-            if (value <= -100000 && (act == Invalid || field->Defensible(side, tank))) {
-                Action defense = Defense();
-                DebugTable();
-                return Defense();
-            }
+//            if (value <= -100000 && (act == Invalid || field->Defensible(side, tank))) {
+//                Action defense = Defense();
+//                DebugTable();
+//                return Defense();
+//            }
             if (act == Invalid)act = Stay;
-            return act;
+            if (secact == Invalid)secact = Stay;
+            return make_pair(act, secact);
         }
 
         DecisionTree(int tank, clock_t endTime) : endTime(endTime), side(TankGame::field->mySide), tank(tank) {}
@@ -1415,10 +1425,12 @@ namespace TankGame {
         int TIME = (field->currentTurn == 1 ? 2 : 1) * CLOCKS_PER_SEC;
         auto tree0 = new DecisionTree(0, startTime + (int) (0.49 * TIME));
         auto tree1 = new DecisionTree(1, startTime + (int) (0.99 * TIME));
-        auto act0 = tree0->GetAction();
-        auto act1 = tree1->GetAction();
-        if (field->MayKill(field->mySide, 0, act0, field->mySide, 1, act1))act0 = Stay;
-        if (field->MayKill(field->mySide, 1, act1, field->mySide, 0, act0))act1 = Stay;
+        auto[act0, secact0] = tree0->GetAction();
+        auto[act1, secact1] = tree1->GetAction();
+        if (field->MayKill(field->mySide, 0, act0, field->mySide, 1, act1))act0 = secact0;
+        if (field->MayKill(field->mySide, 1, act1, field->mySide, 0, act0))act1 = secact1;
+        if (field->MayStack(field->mySide, 0, act0, field->mySide, 1, act1))act0 = secact0;
+        if (field->MayStack(field->mySide, 1, act1, field->mySide, 0, act0))act1 = secact1;
         debug += std::to_string((clock() - startTime) * 1.0 / CLOCKS_PER_SEC);
         SubmitAndExit(act0, act1, debug);
     }
