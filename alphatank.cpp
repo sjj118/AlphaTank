@@ -779,30 +779,33 @@ namespace TankGame {
             if (hasInit[side][tank])return;
             hasInit[side][tank] = true;
             int tmp = tankY[!side][!tank] + dy[Forward(!side)];
-            if (tankAlive[!side][!tank]) {
-                if (IsTankLink(side, tank, !side, !tank) && !WillCounter(side, tank)) {
-                    while (CoordValid(tankX[!side][!tank], tmp) &&
-                           gameField[tmp][tankX[!side][!tank]] == None)
-                        tmp += dy[Forward(!side)];
-                }
-                for (int i = tankY[!side][!tank] + dy[Forward(!side)]; i != tmp; i += dy[Forward(!side)])
-                    gameField[i][tankX[!side][!tank]] = Steel;
-            }
+//            if (tankAlive[!side][!tank]) {
+//                if (IsTankLink(side, tank, !side, !tank) && !WillCounter(side, tank)) {
+//                    while (CoordValid(tankX[!side][!tank], tmp) &&
+//                           gameField[tmp][tankX[!side][!tank]] == None)
+//                        tmp += dy[Forward(!side)];
+//                }
+//                for (int i = tankY[!side][!tank] + dy[Forward(!side)]; i != tmp; i += dy[Forward(!side)])
+//                    gameField[i][tankX[!side][!tank]] = Steel;
+//            }
             Utility::BFSDistance(tankX[side][tank], tankY[side][tank], gameField, dis[side][tank]);
-            if (tankAlive[!side][!tank]) {
-                for (int i = tankY[!side][!tank] + dy[Forward(!side)]; i != tmp; i += dy[Forward(!side)])
-                    gameField[i][tankX[!side][!tank]] = None;
-            }
+//            if (tankAlive[!side][!tank]) {
+//                for (int i = tankY[!side][!tank] + dy[Forward(!side)]; i != tmp; i += dy[Forward(!side)])
+//                    gameField[i][tankX[!side][!tank]] = None;
+//            }
             int ret = (int) 1e9;
-            for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
-                if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
-                if (gameField[baseY[!side]][tx] & Brick)det += 2;
-                if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
-            }
-            for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
-                if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
-                if (gameField[baseY[!side]][tx] & Brick)det += 2;
-                if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
+            if ((side ^ tank) == 0) {
+                for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
+                    if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
+                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
+                    if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
+                }
+            } else {
+                for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
+                    if (dis[side][tank][baseY[!side]][tx] + det < ret)ret = dis[side][tank][baseY[!side]][tx] + det;
+                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
+                    if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
+                }
             }
             int dty = dy[Forward(side)];
             for (int ty = baseY[!side] - dty, det = 0; (gameField[baseX[!side]][ty] & Steel) == 0; ty -= dty) {
@@ -812,15 +815,18 @@ namespace TankGame {
             }
             attackDis[side][tank] = ret + 1 + (tankY[side][tank] == baseY[!side] && JustShoot(side, tank));
             for (int i = 0; i < fieldHeight; ++i)for (int j = 0; j < fieldWidth; ++j)goodPath[side][tank][i][j] = false;
-            for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
-                if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
-                if (gameField[baseY[!side]][tx] & Brick)det += 2;
-                if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
-            }
-            for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
-                if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
-                if (gameField[baseY[!side]][tx] & Brick)det += 2;
-                if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
+            if ((side ^ tank) == 0) {
+                for (int tx = baseX[!side] - 1, det = 0; tx >= 0; --tx) {
+                    if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
+                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
+                    if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
+                }
+            } else {
+                for (int tx = baseX[!side] + 1, det = 0; tx < fieldWidth; ++tx) {
+                    if (dis[side][tank][baseY[!side]][tx] + det == ret)goodPath[side][tank][baseY[!side]][tx] = true;
+                    if (gameField[baseY[!side]][tx] & Brick)det += 2;
+                    if (gameField[baseY[!side]][tx] & Steel)det = (int) 1e9;
+                }
             }
             for (int ty = baseY[!side] - dty, det = 0; (gameField[baseX[!side]][ty] & Steel) == 0; ty -= dty) {
                 if (dis[side][tank][ty][baseX[!side]] + det == ret)goodPath[side][tank][ty][baseX[!side]] = true;
