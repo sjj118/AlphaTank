@@ -239,7 +239,9 @@ namespace TankGame {
             memset(goodDir, 0, sizeof(&goodDir));
             head = 0;
             tail = 0;
-            for (int tx = 0; tx < fieldWidth; ++tx)if (goodPath[baseY][tx])q[tail++] = make_pair(tx, baseY);
+            for (int tx = 0; tx < fieldWidth; ++tx)
+                for (int ty = 0; ty < fieldHeight; ++ty)
+                    if (goodPath[ty][tx])q[tail++] = make_pair(tx, ty);
             while (head < tail) {
                 auto[x, y]=q[head++];
                 for (int o = 0; o < 4; ++o) {
@@ -911,9 +913,9 @@ namespace TankGame {
             return -1;
         }
 
-        int VerticalDis(int side, int tank) {
-            if (side == Blue)return tankY[!side][!tank] - tankY[side][tank];
-            else return tankY[side][tank] - tankY[!side][!tank];
+        bool canDefense(int side, int tank) {
+            return abs(tankX[!side][!tank] - baseX[side]) + abs(tankY[!side][!tank] - baseY[side]) >
+                   abs(tankX[side][tank] - baseX[side]) + abs(tankY[side][tank] - baseY[side]);
         }
 
         bool IsCounter(int x_1, int y_1, int x_2, int y_2) {
@@ -937,7 +939,7 @@ namespace TankGame {
         }
 
         bool WillCounter(int side, int tank) {
-            if (VerticalDis(side, tank) <= 0)return false;
+            if (!canDefense(side, tank))return false;
             if (IsCounter(side, tank))return true;
             if (tankX[side][tank] == tankX[!side][!tank])return false;
             if (std::abs(tankX[side][tank] - tankX[!side][!tank]) > 1)return false;
@@ -994,7 +996,13 @@ namespace TankGame {
             InitDistance(side, tank);
             if (!tankAlive[!side][!tank])return (int) 1e8 - attackDis[side][tank];
             InitDistance(!side, !tank);
-            int ret = 100 * (attackDis[!side][!tank] - attackDis[side][tank]) + 6 * (10 - attackDis[side][tank]);
+            if (!canDefense(side, tank)) {
+                return 500 * (attackDis[!side][!tank] - attackDis[side][tank]);
+            }
+//            if (attackDis[side][tank] <= attackDis[!side][!tank])return 10 * (20 - attackDis[side][tank]);
+//            if (goodPath[!side][!tank][tankY[side][tank]][tankX[side][tank]])return -dis[!side][!tank][tankY[side][tank]][tankX[side][tank]];
+//            else return -100;
+            return 50 * (attackDis[!side][!tank] - attackDis[side][tank]) + 6 * (10 - attackDis[side][tank]);
 //            ret += BlocksBetween(!side, !tank) - BlocksBetween(side, tank);
 //            if (IsLink(tankX[side][tank], tankY[side][tank], tankX[!side][!tank], tankY[!side][!tank])) {
 //                if (VerticalDis(side, tank) <= 0 ||
@@ -1017,7 +1025,7 @@ namespace TankGame {
 //                    gameField[4 + dy[Forward(!side)]][tankX[!side][!tank]] == Brick)
 //                    ret -= 50;
 //            }
-            return ret;
+//            return ret;
         }
 
         int EstimateAttack(int side) {
@@ -1047,38 +1055,28 @@ namespace TankGame {
             return TempMove(acts...) == make_pair(0, 0);
         }
 
-        Action GetPattern(int side, int tank, int side2, int tank2) {
-            for (int cycle = 1; cycle <= 4; ++cycle) {
+        Action GetPattern(int side, int tank) {
+            for (int cycle = 1; cycle <= 8; ++cycle) {
                 if (currentTurn > 4 * cycle) {
                     bool flag = true;
-                    for (int i = 1; i <= 4 * cycle; ++i)if (hasDestroyBlock[side][tank][currentTurn - i])flag = false;
-                    for (int i = 1; i <= 4 * cycle; ++i)if (hasDestroyBlock[side2][tank2][currentTurn - i])flag = false;
-                    for (int i = 1; i <= 4 * cycle - cycle; ++i) {
-                        if (previousActions[currentTurn - i][side][tank] !=
-                            previousActions[currentTurn - i - cycle][side][tank])
-                            flag = false;
-                    }
-                    int x = 0, y = 0;
-                    for (int i = 1; i <= cycle; ++i) {
-                        if (ActionIsMove(previousActions[currentTurn - i][side][tank])) {
-                            x += dx[previousActions[currentTurn - i][side][tank]];
-                            y += dy[previousActions[currentTurn - i][side][tank]];
+                    for (int s = 0; s < 2; ++s) {
+                        for (int t = 0; t < 2; ++t) {
+                            for (int i = 1; i <= 4 * cycle; ++i)if (hasDestroyBlock[s][t][currentTurn - i])flag = false;
+                            for (int i = 1; i <= 4 * cycle - cycle; ++i) {
+                                if (previousActions[currentTurn - i][s][t] !=
+                                    previousActions[currentTurn - i - cycle][s][t])
+                                    flag = false;
+                            }
+                            int x = 0, y = 0;
+                            for (int i = 1; i <= cycle; ++i) {
+                                if (ActionIsMove(previousActions[currentTurn - i][s][t])) {
+                                    x += dx[previousActions[currentTurn - i][s][t]];
+                                    y += dy[previousActions[currentTurn - i][s][t]];
+                                }
+                            }
+                            if (x != 0 || y != 0)flag = false;
                         }
                     }
-                    if (x != 0 || y != 0)flag = false;
-                    for (int i = 1; i <= 4 * cycle - cycle; ++i) {
-                        if (previousActions[currentTurn - i][side2][tank2] !=
-                            previousActions[currentTurn - i - cycle][side2][tank2])
-                            flag = false;
-                    }
-                    x = 0, y = 0;
-                    for (int i = 1; i <= cycle; ++i) {
-                        if (ActionIsMove(previousActions[currentTurn - i][side2][tank2])) {
-                            x += dx[previousActions[currentTurn - i][side2][tank2]];
-                            y += dy[previousActions[currentTurn - i][side2][tank2]];
-                        }
-                    }
-                    if (x != 0 || y != 0)flag = false;
                     if (flag)return previousActions[currentTurn - cycle][side][tank];
                 }
             }
@@ -1212,7 +1210,7 @@ namespace TankGame {
         }
 
         int EstimateCross(Action act0, Action act1) {
-            Action pattern = field->GetPattern(!side, tank, side, tank);
+            Action pattern = field->GetPattern(!side, tank);
             for (auto act2:acts[!side]) {
                 if (pattern != Invalid && pattern != act2)continue;
                 if (field->ActionIsValid(!side, tank, act2)) {
@@ -1246,10 +1244,10 @@ namespace TankGame {
             if (result == Draw)return make_pair(make_pair(0, Invalid), Invalid);
             if (!field->tankAlive[side][tank])return make_pair(make_pair((int) -1e8, Stay), Stay);
             if (field->CrossShoot(side, tank))return make_pair(make_pair((int) -1e8, Stay), Stay);
-            if (depth >= maxDepth)return make_pair(make_pair(field->EstimateAttack(side, tank), Invalid), Invalid);
+            if (depth >= maxDepth) return make_pair(make_pair(field->EstimateAttack(side, tank), Invalid), Invalid);
             int beta = (int) -150000, secbeta = (int) -150000;
             Action act = Invalid, secact = Invalid;
-            Action pattern = field->GetPattern(!side, !tank, side, tank);
+            Action pattern = field->GetPattern(!side, !tank);
             if (depth <= 3) {// quick judge
                 for (auto act0:acts[side]) {
                     if (field->ActionIsValid(side, tank, act0)) {
